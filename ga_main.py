@@ -50,69 +50,19 @@ slew_time = 6.4  # estimate slew time(unit: minute)
 
 
 # %%
-
-# 修正方位角和高度角
-def PointModel(az, el):
-    vpar = np.loadtxt('./vpar_all_0318.txt')
-    az0 = np.deg2rad(az)  # 角度转弧度
-    el0 = np.deg2rad(el)
-    len_vpar = len(vpar)
-
-    if len_vpar == 8:
-        delt_az0 = vpar[0] + vpar[3] * np.tan(el0) + vpar[4] / np.cos(el0) \
-                   + vpar[5] * np.cos(az0) * np.tan(el0) \
-                   + vpar[6] * np.sin(az0) * np.tan(el0)
-        tanel = np.tan(np.array(el0))
-        if type(tanel) == np.float64:
-            if tanel < 0.1:
-                tanel = 0.1
-        else:
-            tanel[tanel < 0.1] = 0.1
-        delt_el0 = vpar[1] + vpar[2] * np.cos(el0) - vpar[5] * np.sin(az0) \
-                   + vpar[6] * np.cos(az0) + vpar[7] / tanel
-
-    if len_vpar == 22:
-        delt_az0 = vpar[0] + np.tan(el0) * np.cos(az0) * vpar[2] \
-                   + np.tan(el0) * np.sin(az0) * vpar[3] \
-                   + np.tan(el0) * vpar[4] - 1. / np.cos(el0) * vpar[5] \
-                   + az0 * vpar[11] + np.cos(az0) * vpar[12] \
-                   + np.sin(az0) * vpar[13] + np.cos(2 * az0) * vpar[16] \
-                   + np.sin(2 * az0) * vpar[17]
-        tanel = np.tan(np.array(el0))
-        if type(tanel) == np.float64:
-            if tanel < 0.1:
-                tanel = 0.1
-        else:
-            tanel[tanel < 0.1] = 0.1
-        delt_el0 = vpar[1] - np.sin(az0) * vpar[2] + np.cos(az0) * vpar[3] \
-                   + np.cos(el0) * vpar[6] + vpar[7] / np.tan(el0) \
-                   + el0 * vpar[8] + np.cos(el0) * vpar[9] \
-                   + np.sin(el0) * vpar[10] + np.cos(2 * az0) * vpar[14] \
-                   + np.sin(2 * az0) * vpar[15] + np.cos(8 * el0) * vpar[18] \
-                   + np.sin(8 * el0) * vpar[19] + np.cos(az0) * vpar[20] \
-                   + np.sin(az0) * vpar[21]
-    az1 = az + delt_az0
-    el1 = el + delt_el0
-
-    return az1, el1
-
-
-# 计算源的俯仰和方位，并加载指向模型，给出修正后的结果
 def src_az_el(srcname, timeinfo):
     srcaltaz = srcname.transform_to(AltAz(obstime=timeinfo, location=YNAO))
     az = srcaltaz.az.degree
     el = srcaltaz.alt.degree
-    az, el = PointModel(az, el)
     return az, el
 
-
-# 计算源的俯仰，并加载指向模型，给出修正后的结果
 def src_el(srcname, timeinfo):
     _, el = src_az_el(srcname, timeinfo)
     return el
 
 
 # 函数定义：从src1到src2的换源时间
+# time from target1 to target2
 def transition1(src1, src2, t0, obs_sit):
     """
     To calculate the time needed for telescope transition from 'src1' to 'src2' at 't0'
@@ -175,7 +125,6 @@ def transition1(src1, src2, t0, obs_sit):
             # count += 1
         return float(format(dt, '.5f')) + t_stable
 
-
 # 函数定义：从初始位置到第一颗源src的切换时间
 def transition2(az0, el0, src, t0, obs_sit):
     """
@@ -236,7 +185,6 @@ def transition2(az0, el0, src, t0, obs_sit):
             # count += 1
         return float(format(dt, '.5f')) + t_stable
 
-
 # 函数定义：检查积分时间段内的俯仰情况
 def check_el_lim(src, inte_time, t_start, loc):
     time_range = np.linspace(0, inte_time, num=inte_time)
@@ -249,7 +197,6 @@ def check_el_lim(src, inte_time, t_start, loc):
             break
     return m
 
-
 # %%
 # 设置初始方位和俯仰
 az0 = 240
@@ -257,7 +204,6 @@ el0 = 88
 # 设置开始观测时间
 time_range = Time(['2021-05-21 00:00:00', "2021-05-22 00:00:00"])
 time_ut = time_range[0] + np.linspace(0, 24, 24 * 60) * u.hour
-
 
 # 定义源
 class Target(object):
@@ -277,7 +223,6 @@ class Target(object):
         srcaltaz = self.sc.transform_to(AltAz(obstime=current_time, location=YNAO))
         az = srcaltaz.az.degree
         el = srcaltaz.alt.degree
-        az, el = PointModel(az, el)
         return az, el
 
 
@@ -304,12 +249,9 @@ with open(targets_file_path, 'r') as f:
         else:
             print("**********Successfully read all the src info. from the originally SKD file!**********\n")
 
-# print(f"共有{len(target_id_list)}源")
-
 
 # %%
 import time
-
 
 def time_seconds(t):
     return time.mktime(time.strptime(t.value.split(".")[0], "%Y-%m-%d %H:%M:%S"))
@@ -322,7 +264,6 @@ min_airmass, max_airmass = 1.0, 10.0
 
 target_available_times = {}  # 可用的观测时间的开始时间和结束时间
 target_available_seconds = {}  # 可用的秒数
-
 
 def cal_avail_times(target):
     available_times = []
@@ -364,24 +305,19 @@ def cal_avail_times(target):
         last_idx = idx
     return target.id, available_times, available_seconds
 
-
 # %%
 # #并行计算方法
 import dask.bag as db
 
-
 def group_by_id(id1):
     return id1[0]
-
 
 def reduce_id(v):
     return v
 
-
 b = db.from_sequence([target for _,target in targets_dict.items()], npartitions=1)
 c = b.map(cal_avail_times).foldby(key = group_by_id, binop=reduce_id)
 d = c.compute()
-
 
 # 结果验证
 for k in d:
@@ -506,29 +442,6 @@ class GA:
                     target_calibration_list.remove(src_name[0])
                 except ValueError:
                     pass
-
-                # 遍历剩余源
-                # src_name_y = target_calibration_list[y]
-                # utc_obs_start_y = utc_obs_start
-                # inte_time2 = targets_dict[src_name_y].int_time
-                # if len(target_available_times[src_name_y]) == 1:
-                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                #             target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time):
-                #         target_variable_list.append(target_calibration_list[y])
-                # if len(target_available_times[src_name_y]) == 2:
-                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                #         target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                #             (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                #              target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time):
-                #         target_variable_list.append(target_calibration_list[y])
-                # if len(target_available_times[src_name_y]) == 3:
-                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                #         target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                #             (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                #              target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time) or \
-                #             (target_available_times[src_name_y][2][0] > utc_obs_start_y and \
-                #              target_available_times[src_name_y][2][1] < utc_obs_start_y + inte_time + slew_time):
-                #         target_variable_list.append(target_calibration_list[y])
                 src_name_y = target_calibration_list[y]
                 utc_obs_start_y = utc_obs_start
                 inte_time = targets_dict[src_name_y].int_time
@@ -922,13 +835,26 @@ class GA:
 
 # %%
 # begin 
-params = {'NP' : 10, \
-            'num_source': 28, \
-            'w1' : 0.5, \
-            'w2' : 0.5, \
+'''
+NP: the size of population
+num_source: number of targets
+w1: weight of offset from the optimal angle(alpha)  in fitness function
+w2： weight of slew time in fitness function
+maxGen：number of generations
+CXPB：probility of crossover
+MUTPB：probility of mutation
+TIME_INTERVAL: interval of calculating angle
+COUNT_STOP: number of iterations before there is no better fitness
+'''
+params = {'NP' : 4, \
+            'num_source' : 28, \
+            'w1' : 0.3, \
+            'w2' : 0.7, \
             'maxGen' : 10, \
             'CXPB' : 0.8, \
-            'MUTPB' : 0.1}
+            'MUTPB' : 0.3, \
+            'TIME_INTERVAL': 100, \
+            'COUNT_STOP' : 2}
 ga = GA(params)
 
 ga.GA_main()

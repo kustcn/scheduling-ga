@@ -6,7 +6,6 @@ import time
 import random
 import copy
 
-
 import numpy as np
 import astropy.units as u
 from astropy.time import Time
@@ -96,7 +95,6 @@ def PointModel(az, el):
 
     return az1, el1
 
-
 # 计算源的俯仰和方位，并加载指向模型，给出修正后的结果
 def src_az_el(srcname, timeinfo):
     srcaltaz = srcname.transform_to(AltAz(obstime=timeinfo, location=YNAO))
@@ -105,12 +103,10 @@ def src_az_el(srcname, timeinfo):
     az, el = PointModel(az, el)
     return az, el
 
-
 # 计算源的俯仰，并加载指向模型，给出修正后的结果
 def src_el(srcname, timeinfo):
     _, el = src_az_el(srcname, timeinfo)
     return el
-
 
 # 函数定义：从src1到src2的换源时间
 def transition1(src1, src2, t0, obs_sit):
@@ -279,8 +275,6 @@ class Target(object):
         el = srcaltaz.alt.degree
         az, el = PointModel(az, el)
         return az, el
-
-
 # %%
 #5 加载源
 targets_dict = {}

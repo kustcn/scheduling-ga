@@ -86,7 +86,7 @@ ax.set_xlim([0, 1440])
 ax.set_yticklabels([])
 ax.axes.yaxis.set_visible(False) 
 xticks = list(range(0, 1400, 100))
-#最后一个观测完的时间last_time = 1400
+#最后一个观测完的时间last_time = 1384
 last_time = 1384
 xticks.append(last_time)
 xticks.append(1440)

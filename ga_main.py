@@ -1,5 +1,5 @@
 # %%
-1.# 导入包并且设置参数
+#1. import
 import os
 
 import time
@@ -27,13 +27,14 @@ targets_file_path = os.getcwd() + '/targets.txt' # targets list for scheduling
 length_columns_file = 12  # skd file infomations of column
 
 # %%
-#2 望远镜基本信息
+# 2 basic configuration
+
 el_lim = 10.
 el_max = 65.
 lat = 25.028  # unit: degree
 lon = 102.796  # unit: degree
 height = 1974  # unit: meter
-# 设置台站信息
+# telecope
 YNAO = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=height * u.m)
 
 observer = Observer(name='40m Telescope',
@@ -49,9 +50,9 @@ slew_time = 6.4  # estimate slew time(unit: minute)
 
 
 # %%
-#3 修正方位角和高度角
+
+# 修正方位角和高度角
 def PointModel(az, el):
-    # vpar = np.loadtxt('/mnt/storage-ssd/weibingtao/work/skd/Gurobi-Python/brakga_40m/vpar_all_0318.txt')
     vpar = np.loadtxt('./vpar_all_0318.txt')
     az0 = np.deg2rad(az)  # 角度转弧度
     el0 = np.deg2rad(el)
@@ -95,6 +96,7 @@ def PointModel(az, el):
 
     return az1, el1
 
+
 # 计算源的俯仰和方位，并加载指向模型，给出修正后的结果
 def src_az_el(srcname, timeinfo):
     srcaltaz = srcname.transform_to(AltAz(obstime=timeinfo, location=YNAO))
@@ -103,10 +105,12 @@ def src_az_el(srcname, timeinfo):
     az, el = PointModel(az, el)
     return az, el
 
+
 # 计算源的俯仰，并加载指向模型，给出修正后的结果
 def src_el(srcname, timeinfo):
     _, el = src_az_el(srcname, timeinfo)
     return el
+
 
 # 函数定义：从src1到src2的换源时间
 def transition1(src1, src2, t0, obs_sit):
@@ -247,7 +251,7 @@ def check_el_lim(src, inte_time, t_start, loc):
 
 
 # %%
-#4 设置初始方位和俯仰
+# 设置初始方位和俯仰
 az0 = 240
 el0 = 88
 # 设置开始观测时间
@@ -275,28 +279,37 @@ class Target(object):
         el = srcaltaz.alt.degree
         az, el = PointModel(az, el)
         return az, el
+
+
 # %%
-#5 加载源
+# 加载源
 targets_dict = {}
 inte_time_list = []
 target_id_list = []
 
 with open(targets_file_path, 'r') as f:
     lines = f.readlines()
-    for line in lines[1:]:
-        cols = line.split()
-        src = cols[1]
-        ra = cols[2] + 'h' + cols[3] + 'm' + cols[4] + 's'
-        dec = cols[5] + 'd' + cols[6] + 'm' + cols[7] + 's'
-        inte_time = float(cols[9])
-        config_file = cols[10]
-        target = Target(src, ra, dec, inte_time, config_file)
-        target_id_list.append(src)
-        targets_dict[src] = target
-    print(f"Successfully read all the targets,size:{len(target_id_list)}")
+    for line in lines:
+        line = line.split()
+        src_per_info = []
+        if len(line) == length_columns_file:
+            src = line[1]
+            ra = line[2] + 'h' + line[3] + 'm' + line[4] + 's'
+            dec = line[5] + 'd' + line[6] + 'm' + line[7] + 's'
+            inte_time = float(line[9])
+            config_file = line[10]
+            target = Target(src, ra, dec, inte_time, config_file)
+            target_id_list.append(src)
+            targets_dict[src] = target
+        else:
+            print("**********Successfully read all the src info. from the originally SKD file!**********\n")
+
+# print(f"共有{len(target_id_list)}源")
+
 
 # %%
 import time
+
 
 def time_seconds(t):
     return time.mktime(time.strptime(t.value.split(".")[0], "%Y-%m-%d %H:%M:%S"))
@@ -309,6 +322,7 @@ min_airmass, max_airmass = 1.0, 10.0
 
 target_available_times = {}  # 可用的观测时间的开始时间和结束时间
 target_available_seconds = {}  # 可用的秒数
+
 
 def cal_avail_times(target):
     available_times = []
@@ -350,35 +364,25 @@ def cal_avail_times(target):
         last_idx = idx
     return target.id, available_times, available_seconds
 
+
 # %%
 # #并行计算方法
 import dask.bag as db
 
+
 def group_by_id(id1):
     return id1[0]
+
 
 def reduce_id(v):
     return v
 
-d = list()
-for _,target in targets_dict.items():
-    d.append([target.id, cal_avail_times(target)])
 
-b = db.from_sequence([target for _,target in targets_dict.items()], npartitions=len(targets_dict.items()))
+b = db.from_sequence([target for _,target in targets_dict.items()], npartitions=1)
 c = b.map(cal_avail_times).foldby(key = group_by_id, binop=reduce_id)
 d = c.compute()
 
-# Save文件
-# import pickle
-# a_f = open("./avail_time_slots.pickle","wb")
-# pickle.dump(d,"avail_time_slots.pickle")
-# a_f.close()
 
-# load
-# import pickle
-# a_f = open("./avail_time_slots.pickle","rb")
-# d = pickle.load("avail_time_slots.pickle")
-# a_f.close()
 # 结果验证
 for k in d:
     target_available_times[k[0]] = k[1][1]
@@ -433,6 +437,7 @@ def get_time(gene_list):
 
     # return time_sum
     return timeinfo_out + time_all_out
+
 #########################################################################################################
 
 from operator import itemgetter
@@ -441,7 +446,6 @@ class Gene:
     def __init__(self, **data):
         self.__dict__.update(data)
         self.size = len(data['data'])
-
 
 class GA:
     def __init__(self, parameter):
@@ -504,27 +508,63 @@ class GA:
                     pass
 
                 # 遍历剩余源
+                # src_name_y = target_calibration_list[y]
+                # utc_obs_start_y = utc_obs_start
+                # inte_time2 = targets_dict[src_name_y].int_time
+                # if len(target_available_times[src_name_y]) == 1:
+                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
+                #             target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time):
+                #         target_variable_list.append(target_calibration_list[y])
+                # if len(target_available_times[src_name_y]) == 2:
+                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
+                #         target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
+                #             (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
+                #              target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time):
+                #         target_variable_list.append(target_calibration_list[y])
+                # if len(target_available_times[src_name_y]) == 3:
+                #     if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
+                #         target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
+                #             (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
+                #              target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time) or \
+                #             (target_available_times[src_name_y][2][0] > utc_obs_start_y and \
+                #              target_available_times[src_name_y][2][1] < utc_obs_start_y + inte_time + slew_time):
+                #         target_variable_list.append(target_calibration_list[y])
                 src_name_y = target_calibration_list[y]
                 utc_obs_start_y = utc_obs_start
-                inte_time2 = targets_dict[src_name_y].int_time
+                inte_time = targets_dict[src_name_y].int_time
+                src_1 = targets_dict[src_name_y].ra + ' ' + targets_dict[src_name_y].dec
+                src1 = SkyCoord(src_1, frame='icrs', unit=(u.hourangle, u.deg))
+                src_2 = targets_dict[geneinfo[x][0]].ra + ' ' + targets_dict[geneinfo[x][0]].dec
+                src2 = SkyCoord(src_2, frame='icrs', unit=(u.hourangle, u.deg))
+
+                slewtime1 = float(transition1(src1, src2, utc_obs_start_y, YNAO)) / 60.
+
+                # 计算第二颗源到最后一颗源的开始时间和结束时间
+                record_scan_start_time = utc_obs_start_y + slewtime1 * u.minute
+                record_scan_end_time = record_scan_start_time + inte_time * u.minute
+                #判断这个时间段是否位于源的可用时间段内
+                flag = False
                 if len(target_available_times[src_name_y]) == 1:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                            target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
-                if len(target_available_times[src_name_y]) == 2:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                        target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                            (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
-                if len(target_available_times[src_name_y]) == 3:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                        target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                            (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time) or \
-                            (target_available_times[src_name_y][2][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][2][1] < utc_obs_start_y + inte_time + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                            target_available_times[src_name_y][0][1] >= record_scan_end_time):
+                        flag = True
+                elif len(target_available_times[src_name_y]) == 2:
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                            target_available_times[src_name_y][0][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][1][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][1][1] >= record_scan_end_time):
+                        flag = True
+                elif len(target_available_times[src_name_y]) == 3:
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                        target_available_times[src_name_y][0][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][1][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][1][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][2][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][2][1] >= record_scan_end_time):
+                        flag = True
+                if flag:
+                    target_variable_list.append(target_calibration_list[y])
+
 
             # 选择target_variable_list中被观测次数最少的源作为下一颗源
             Value_min = 1E30
@@ -549,6 +589,7 @@ class GA:
             slewtime1 = float(transition1(src1, src2, utc_obs_start_y, YNAO)) / 60.
 
             # 计算第二颗源到最后一颗源的开始时间和结束时间
+            inte_time = targets_dict[src_name_random[0]].int_time
             record_scan_start_time = utc_obs_start_y + slewtime1 * u.minute
             record_scan_end_time = record_scan_start_time + inte_time * u.minute
             geneinfo.append([src_name_random[0], record_scan_start_time, record_scan_end_time])
@@ -562,7 +603,7 @@ class GA:
             newPoint：计算得到的下一个源
         '''
 
-        geneinfo = cur_solution
+        geneinfo = copy.deepcopy(cur_solution)
 
         # 记录每个源被观测的次数
         target_observed = dict()
@@ -595,25 +636,39 @@ class GA:
                 # 遍历剩余源
                 src_name_y = target_calibration_list[y]
                 utc_obs_start_y = utc_obs_start
-                inte_time2 = targets_dict[src_name_y].int_time
+                inte_time = targets_dict[src_name_y].int_time
+                src_1 = targets_dict[src_name_y].ra + ' ' + targets_dict[src_name_y].dec
+                src1 = SkyCoord(src_1, frame='icrs', unit=(u.hourangle, u.deg))
+                src_2 = targets_dict[geneinfo[x][0]].ra + ' ' + targets_dict[geneinfo[x][0]].dec
+                src2 = SkyCoord(src_2, frame='icrs', unit=(u.hourangle, u.deg))
+
+                slewtime1 = float(transition1(src1, src2, utc_obs_start_y, YNAO)) / 60.
+
+                # 计算第二颗源到最后一颗源的开始时间和结束时间
+                record_scan_start_time = utc_obs_start_y + slewtime1 * u.minute
+                record_scan_end_time = record_scan_start_time + inte_time * u.minute
+                # 判断这个时间段是否位于源的可用时间段内
+                flag = False
                 if len(target_available_times[src_name_y]) == 1:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                            target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
-                if len(target_available_times[src_name_y]) == 2:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                        target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                            (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
-                if len(target_available_times[src_name_y]) == 3:
-                    if (target_available_times[src_name_y][0][0] > utc_obs_start_y and \
-                        target_available_times[src_name_y][0][1] < utc_obs_start_y + inte_time2 + slew_time) or \
-                            (target_available_times[src_name_y][1][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][1][1] < utc_obs_start_y + inte_time + slew_time) or \
-                            (target_available_times[src_name_y][2][0] > utc_obs_start_y and \
-                             target_available_times[src_name_y][2][1] < utc_obs_start_y + inte_time + slew_time):
-                        target_variable_list.append(target_calibration_list[y])
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                            target_available_times[src_name_y][0][1] >= record_scan_end_time):
+                        flag = True
+                elif len(target_available_times[src_name_y]) == 2:
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                        target_available_times[src_name_y][0][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][1][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][1][1] >= record_scan_end_time):
+                        flag = True
+                elif len(target_available_times[src_name_y]) == 3:
+                    if (target_available_times[src_name_y][0][0] <= record_scan_start_time and \
+                        target_available_times[src_name_y][0][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][1][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][1][1] >= record_scan_end_time) or \
+                            (target_available_times[src_name_y][2][0] <= record_scan_start_time and \
+                             target_available_times[src_name_y][2][1] >= record_scan_end_time):
+                        flag = True
+                if flag:
+                    target_variable_list.append(target_calibration_list[y])
 
             # 选择target_variable_list中被观测次数最少的源作为下一颗源
             Value_min = 1E30
@@ -638,27 +693,34 @@ class GA:
             slewtime1 = float(transition1(src1, src2, utc_obs_start_y, YNAO)) / 60.
 
             # 计算第二颗源到最后一颗源的开始时间和结束时间
+            inte_time = targets_dict[src_name_random[0]].int_time
             record_scan_start_time = utc_obs_start_y + slewtime1 * u.minute
             record_scan_end_time = record_scan_start_time + inte_time * u.minute
             geneinfo.append([src_name_random[0], record_scan_start_time, record_scan_end_time])
 
         return geneinfo
 
+    # 目标函数3
+    def get_angle(self, gene_list):
+        '''
+        遍历源，并计算角度偏移情况
+        '''
+        el_list = []
+        for source in gene_list:
+            start_time = source[1]
+            while start_time < source[2]:
+                el_list.append(src_el(targets_dict[source[0]].sc, start_time) - 45)
+                start_time += self.parameter['TIME_INTERVAL'] * u.minute
+
+        return sum(np.power(el_list, 2))
+
+
     def fitness_func(self, gene):
 
-        gain_total = 0
-        for i in range(len(gene)):
-
-            src_name = gene[i][0]
-            src0 = targets_dict[src_name].ra + '' + targets_dict[src_name].dec
-            src = SkyCoord(src0, frame='icrs', unit=(u.hourangle, u.deg))
-
-            az, el = src_az_el(src, gene[i][1])
-            gain_total += gain(el)
-
         get_time_total = float(get_time(gene))
+        get_angle_total = self.get_angle(gene)
 
-        return self.parameter['w1'] * gain_total + self.parameter['w2'] * get_time_total
+        return self.parameter['w1'] * get_angle_total + self.parameter['w2'] * get_time_total
 
     def islegal(self, gene):
         '''
@@ -667,27 +729,8 @@ class GA:
         '''
         for igene in range(1, len(gene.data)):
             flag = False
-            try:
-                if len(target_available_times[gene.data[igene][0]]) == 1:
-                    if gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][0][1] and \
-                            gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][0][0]:
-                        flag = True
-                elif len(target_available_times[gene.data[igene][0]]) == 2:
-                    if (gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][0][1] and \
-                            gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][0][0]) or \
-                            (gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][1][1] and \
-                             gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][1][0]):
-                        flag = True
-                elif len(target_available_times[gene.data[igene][0]]) == 3:
-                    if (gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][0][1] and \
-                        gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][0][0]) or \
-                            (gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][1][1] and \
-                             gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][1][0]) or \
-                            (gene.data[igene - 1][2] < target_available_times[gene.data[igene][0]][2][1] and \
-                             gene.data[igene - 1][2] > target_available_times[gene.data[igene][0]][2][0]):
-                        flag = True
-            except :
-                err = 1
+            if gene.data[igene][1] > gene.data[igene - 1][2] and gene.data[igene][1] < gene.data[igene - 1][2] + slew_time * u.minute:
+                flag = True
 
 
             if not flag:
@@ -704,7 +747,8 @@ class GA:
     # 按照一定的概率选择个体
 
     def selection(self, individuals, k):
-        s_inds = sorted(individuals, key=itemgetter("fitness"), reverse=False)
+
+        s_inds = copy.deepcopy(sorted(individuals, key=itemgetter("fitness"), reverse=False))
         sum_fits = sum(ind['fitness'] for ind in individuals)  # sum up the fitness of the whole pop
         chosen = []
         for i in range(k):
@@ -713,7 +757,7 @@ class GA:
             for ind in s_inds:
                 sum_ += ind['fitness']  # sum up the fitness
                 if sum_ >= u:
-                    chosen.append(ind)
+                    chosen.append(copy.deepcopy(ind))
                     break
         chosen = sorted(chosen, key=itemgetter("fitness"), reverse=False)
         return chosen
@@ -721,8 +765,9 @@ class GA:
     # 基因交叉
     def crossoperate(self, offspring):
         dim = min(len(offspring[0]['Gene'].data), len(offspring[1]['Gene'].data))
-        geninfo1 = offspring[0]['Gene'].data  # Gene's data of first offspring chosen from the selected pop
-        geninfo2 = offspring[1]['Gene'].data  # Gene's data of second offspring chosen from the selected pop
+
+        geninfo1 = copy.deepcopy(offspring[0]['Gene'].data)  # Gene's data of first offspring chosen from the selected pop
+        geninfo2 = copy.deepcopy(offspring[1]['Gene'].data)  # Gene's data of second offspring chosen from the selected pop
         if dim == 1:
             pos1 = 1
             pos2 = 1
@@ -736,11 +781,11 @@ class GA:
         temp2 = []
         for i in range(dim):
             if min(pos1, pos2) <= i <= max(pos1, pos2):
-                temp2.append(geninfo2[i])
-                temp1.append(geninfo1[i])
+                temp2.append(copy.deepcopy(geninfo2[i]))
+                temp1.append(copy.deepcopy(geninfo1[i]))
             else:
-                temp2.append(geninfo1[i])
-                temp1.append(geninfo2[i])
+                temp2.append(copy.deepcopy(geninfo1[i]))
+                temp1.append(copy.deepcopy(geninfo2[i]))
 
         newoff1.data = temp1
         newoff2.data = temp2
@@ -789,63 +834,6 @@ class GA:
         temp = self.find_next_point(offspring.data[0 : pos])
         offspring.data[0: pos + 1] = temp
 
-        # targetuse = offspring.data[:pos]
-        # for i in range(len(targetuse)):
-        #     if i == 0:
-        #         targetuse1 = targetuse[i]
-        #         src0 = targets_dict[targetuse1[0]].ra + '' + targets_dict[targetuse1[0]].dec
-        #         src = SkyCoord(src0, frame='icrs', unit=(u.hourangle, u.deg))
-        #         utc_obs_start = time_range[0]
-        #         slewtime = float(transition2(float(az0), float(el0), src, utc_obs_start, YNAO)) / 60.
-        #         record_scan_start_time = utc_obs_start + slewtime * u.minute
-        #         record_scan_end_time = record_scan_start_time + inte_time * u.minute
-        #         # 为下一个循环开始设置时间
-        #         utc_obs_start = Time(record_scan_end_time)
-        #     else:
-        #         targetuse1 = targetuse[i]
-        #         utc_obs_start_y = utc_obs_start
-        #         src_1 = targets_dict[targetuse1[0]].ra + ' ' + targets_dict[targetuse1[0]].dec
-        #         src1 = SkyCoord(src_1, frame='icrs', unit=(u.hourangle, u.deg))
-        #         targetuse2 = targetuse[i - 1]
-        #         src_2 = targets_dict[targetuse2[0]].ra + ' ' + targets_dict[targetuse2[0]].dec
-        #         src2 = SkyCoord(src_2, frame='icrs', unit=(u.hourangle, u.deg))
-        #
-        #         slewtime = float(transition1(src1, src2, utc_obs_start_y, YNAO)) / 60.
-        #         record_scan_start_time = utc_obs_start_y + slewtime * u.minute
-        #         record_scan_end_time = record_scan_start_time + inte_time * u.minute
-        #         utc_obs_start = Time(record_scan_end_time)
-        #
-        # targetcopy = copy.deepcopy(target_id_list)
-        # targetcopy.remove(offspring.data[pos][0])
-        # for i in range(0, 52):
-        #     targetlist = []
-        #     src_name_i = targetcopy[i]
-        #     inte_time2 = targets_dict[src_name_i].int_time
-        #     utc_obs_start_1 = utc_obs_start
-        #     if len(target_available_times[src_name_i]) == 1:
-        #         if (target_available_times[src_name_i][0][0] > utc_obs_start_1 and
-        #                 target_available_times[src_name_i][0][1] < utc_obs_start_1 + inte_time2 + slew_time):
-        #             targetlist.append(targetcopy[i])
-        #     if len(target_available_times[src_name_i]) == 2:
-        #         if (target_available_times[src_name_i][0][0] > utc_obs_start_1 and
-        #             target_available_times[src_name_i][0][1] < utc_obs_start_1 + inte_time2 + slew_time) or (
-        #                 target_available_times[src_name_i][1][0] > utc_obs_start_1 and
-        #                 target_available_times[src_name_i][1][1] < utc_obs_start_1 + inte_time + slew_time):
-        #             targetlist.append(targetcopy[i])
-        #     if len(target_available_times[src_name_i]) == 3:
-        #         if (target_available_times[src_name_i][0][0] > utc_obs_start_1 and
-        #             target_available_times[src_name_i][0][1] < utc_obs_start_1 + inte_time2 + slew_time) or (
-        #                 target_available_times[src_name_i][1][0] > utc_obs_start_1 and
-        #                 target_available_times[src_name_i][1][1] < utc_obs_start_1 + inte_time + slew_time) or (
-        #                 target_available_times[src_name_i][2][0] > utc_obs_start_1 and
-        #                 target_available_times[src_name_i][2][1] < utc_obs_start_1 + inte_time + slew_time):
-        #             targetlist.append(targetcopy[i])
-        #
-        # try:
-        #     offspring.data[pos] = random.sample(targetlist, 1)
-        # except ValueError:
-        #     pass
-
         return offspring
 
     def GA_main(self):
@@ -856,7 +844,8 @@ class GA:
         # Begin the evolution
 
         aaa = time.time()
-
+        trace = list()
+        count = 0       #记录已经多少次没能优化了
         for g in range(self.parameter['maxGen']):
 
             print("############### Generation {} ###############".format(g))
@@ -869,8 +858,7 @@ class GA:
                 # Apply crossover and mutation on the offspring
 
                 # Select two individuals
-
-                offspring = [selectpop.pop() for _ in range(2)]
+                offspring = copy.deepcopy([selectpop.pop() for _ in range(2)])
 
                 if random.random() < self.parameter['CXPB']:  # cross two individuals with probability CXPB
                     crossoff1, crossoff2 = self.crossoperate(offspring)
@@ -879,15 +867,6 @@ class GA:
                         muteoff1 = self.mutation(crossoff1)
                         muteoff2 = self.mutation(crossoff2)
 
-                        for item in crossoff1.data:
-                            if len(item) == 1:
-                                err = 1
-                        for item in crossoff2.data:
-                            if len(item) == 1:
-                                err = 1
-
-                        # fit_muteoff1 = self.get_time(muteoff1.data)  # Evaluate the individual
-                        # fit_muteoff2 = self.get_time(muteoff2.data)
                         muteoff1 = self.islegal(muteoff1)
                         muteoff2 = self.islegal(muteoff2)
                         fit_muteoff1 = self.fitness_func(muteoff1.data)
@@ -906,7 +885,6 @@ class GA:
                         nextoff.append({'Gene': crossoff1, 'fitness': fit_crossoff1})
                         nextoff.append({'Gene': crossoff2, 'fitness': fit_crossoff2})
                 else:
-
                     nextoff.extend(offspring)
 
             # The population is entirely replaced by the offspring
@@ -921,17 +899,26 @@ class GA:
 
             if best_ind['fitness'] < self.bestindividual['fitness']:
                 self.bestindividual = best_ind
+                count = 0
+            else:
+                count += 1
+            trace.append(self.bestindividual['fitness'])
 
             for ibestIndiv in range(len(self.bestindividual['Gene'].data)):
                 print('第' + str(ibestIndiv) + '个源：' + self.bestindividual['Gene'].data[ibestIndiv][0] + '\n')
                 print('开始时间：' + str(self.bestindividual['Gene'].data[ibestIndiv][1]) + '\n')
                 print('结束时间：' + str(self.bestindividual['Gene'].data[ibestIndiv][2]) + '\n')
 
-            # print("Best individual found is {}, {}".format(self.bestindividual['Gene'].data,
-            #                                                self.bestindividual['fitness']))
-            # print("  Max fitness of current pop: {}".format(min(fits)))
+                print("Best individual found is  {}".format(self.bestindividual['fitness']))
 
+            if count < self.parameter['COUNT_STOP']:
+                break
+            
         print("------ End of (successful) evolution ------")
+        if count == self.parameter['COUNT_STOP']:
+            print('算法因{}次迭代不优化而停止'.format(self.parameter['COUNT_STOP']))
+        else:
+            print('算法因达到最大迭代次数而停止')
 
 # %%
 # begin 
